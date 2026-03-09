@@ -1,0 +1,1034 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+   name="PoisonTracker"
+   author="BraeBear"
+   id="c0ffeeba5eda7a11deaf1234"
+   language="Lua"
+   purpose="Track Discworld poison ingredients, poisons, and coatings"
+   date_written="2026-01-01"
+   save_state="y"
+   requires="4.84"
+   version="1.0"
+   >
+</plugin>
+
+<!--  Aliases  -->
+<aliases>
+
+  <!-- poison set <item> <qty> -->
+  <alias
+   match="^poison set (.+) (\d+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonSet("%1", tonumber("%2"))</send>
+  </alias>
+
+  <!-- poison add <item> <qty> -->
+  <alias
+   match="^poison add (.+) (\d+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonAdd("%1", tonumber("%2"))</send>
+  </alias>
+
+  <!-- poison use <item> <qty> -->
+  <alias
+   match="^poison use (.+) (\d+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonUse("%1", tonumber("%2"))</send>
+  </alias>
+
+  <!-- poison reset -->
+  <alias
+   match="^poison reset$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonReset()</send>
+  </alias>
+
+  <!-- poison show -->
+  <alias
+   match="^poison show$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonShow()</send>
+  </alias>
+
+  <!-- poison additem <type> <name> -->
+  <alias
+   match="^poison additem (ingredient|poison|coating) (.+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonAddItem("%1", "%2")</send>
+  </alias>
+
+  <!-- poison removeitem <name> -->
+  <alias
+   match="^poison removeitem (.+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonRemoveItem("%1")</send>
+  </alias>
+
+  <!-- poison link <ingredient> to <poison> -->
+  <alias
+   match="^poison link (.+) to (.+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonLink("%1", "%2")</send>
+  </alias>
+
+  <!-- coating setbase <coating> <base ingredient> -->
+  <alias
+   match="^coating setbase (.+) : (.+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>CoatingSetBase("%1", "%2")</send>
+  </alias>
+
+  <!-- coating setpoison <coating> : <poison> -->
+  <alias
+   match="^coating setpoison (.+) : (.+)$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>CoatingSetPoison("%1", "%2")</send>
+  </alias>
+
+  <!-- poison help -->
+  <alias
+   match="^poison help$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>PoisonHelp()</send>
+  </alias>
+
+</aliases>
+
+<timers>
+</timers>
+
+<script>
+<![CDATA[
+
+require "json"
+
+--------------------------------------------------------------------------------
+--  DEFAULT DATA
+--
+--  tPoisons     = { [name] = { appearance="...", ingredients={...}, qty=N } }
+--  tIngredients = { [name] = { qty=N } }
+--  tCoatings    = { [name] = { base="...", poison="...", qty=N } }
+--    base   = name of the base ingredient (e.g. "pale brown goo")
+--    poison = name of the poison used (e.g. "bloat poison")
+--------------------------------------------------------------------------------
+
+local DEFAULT_POISONS = {
+  ["bloat poison"] = {
+    appearance  = "oily brown liquid",
+    ingredients = {"blowfish poison sac"},
+    qty = 0
+  },
+  ["command removal poison"] = {
+    appearance  = "vivid chartreuse liquid",
+    ingredients = {},
+    qty = 0
+  },
+  ["con poison"] = {
+    appearance  = "oily colourless liquid",
+    ingredients = {"hemlock", "snake poison sac", "water"},
+    qty = 0
+  },
+  ["gas bomb"] = {
+    appearance  = "gas bomb",
+    ingredients = {"clay", "bat guano", "Black Benedict's Batsup", "loose sugar", "sulphur powder", "candle wick"},
+    qty = 0
+  },
+  ["gp poison"] = {
+    appearance  = "shimmering orange liquid",
+    ingredients = {"belladonna", "hemlock", "water"},
+    qty = 0
+  },
+  ["hallucination poison"] = {
+    appearance  = "brilliant blue liquid",
+    ingredients = {"toad skin", "Angel's trumpet", "water"},
+    qty = 0
+  },
+  ["hp poison"] = {
+    appearance  = "sparkling purple syrup",
+    ingredients = {"achorion mould", "vodka"},
+    qty = 0
+  },
+  ["misdirection poison"] = {
+    appearance  = "beige liquid",
+    ingredients = {"skullcap"},
+    qty = 0
+  },
+  ["rage poison"] = {
+    appearance  = "pink creamy liquid",
+    ingredients = {"Tyler Weed", "wolf heart", "lion duct", "water", "orange tablet"},
+    qty = 0
+  },
+  ["smoke bomb"] = {
+    appearance  = "smoke bomb",
+    ingredients = {"clay", "bat guano", "Black Benedict's Batsup", "loose sugar", "sulphur powder", "candle wick"},
+    qty = 0
+  },
+  ["spell removal poison"] = {
+    appearance  = "shimmering blue liquid",
+    ingredients = {"borage", "nightshade", "blue lotus"},
+    qty = 0
+  },
+  ["venom poison"] = {
+    appearance  = "dark red liquid",
+    ingredients = {"poison gland (giant spider) OR poison sac (scorpion)"},
+    qty = 0
+  },
+  ["weedkiller poison"] = {
+    appearance  = "deep lime green liquid",
+    ingredients = {"geranium", "solvent"},
+    qty = 0
+  },
+  -- ["poison name"] = { appearance = "colour liquid", ingredients = {"ingredient 1", "ingredient 2"}, qty = 0 },
+}
+
+local DEFAULT_INGREDIENTS = {
+  ["blowfish poison sac"]         = { qty = 0 },
+  ["hemlock"]                     = { qty = 0 },
+  ["snake poison sac"]            = { qty = 0 },
+  ["water"]                       = { qty = 0 },
+  ["clay"]                        = { qty = 0 },
+  ["bat guano"]                   = { qty = 0 },
+  ["Black Benedict's Batsup"]     = { qty = 0 },
+  ["loose sugar"]                 = { qty = 0 },
+  ["sulphur powder"]              = { qty = 0 },
+  ["candle wick"]                 = { qty = 0 },
+  ["belladonna"]                  = { qty = 0 },
+  ["toad skin"]                   = { qty = 0 },
+  ["Angel's trumpet"]             = { qty = 0 },
+  ["achorion mould"]              = { qty = 0 },
+  ["vodka"]                       = { qty = 0 },
+  ["skullcap"]                    = { qty = 0 },
+  ["Tyler Weed"]                  = { qty = 0 },
+  ["wolf heart"]                  = { qty = 0 },
+  ["lion duct"]                   = { qty = 0 },
+  ["orange tablet"]               = { qty = 0 },
+  ["borage"]                      = { qty = 0 },
+  ["nightshade"]                  = { qty = 0 },
+  ["blue lotus"]                  = { qty = 0 },
+  ["poison gland (giant spider)"] = { qty = 0 },
+  ["poison sac (scorpion)"]       = { qty = 0 },
+  ["geranium"]                    = { qty = 0 },
+  ["solvent"]                     = { qty = 0 },
+  ["black coffee"]                = { qty = 0 },
+  ["arcane moss"]                 = { qty = 0 },
+  ["pale brown goo"]              = { qty = 0 },
+  -- ["ingredient name"] = { qty = 0 },
+}
+
+local DEFAULT_COATINGS = {
+  -- Each coating = pale brown goo (base) + bloat poison + one additional poison
+  ["con coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "con poison",
+    qty     = 0
+  },
+  ["hp coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "hp poison",
+    qty     = 0
+  },
+  ["rage coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "rage poison",
+    qty     = 0
+  },
+  ["spell removal coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "spell removal poison",
+    qty     = 0
+  },
+  ["gp coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "gp poison",
+    qty     = 0
+  },
+  ["venom coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = "venom poison",
+    qty     = 0
+  },
+  ["bloat coating"] = {
+    base    = "pale brown goo",
+    poison1 = "bloat poison",
+    poison2 = nil,
+    qty     = 0
+  },
+  -- Add more coatings here:
+  -- ["coating name"] = { base = "pale brown goo", poison1 = "bloat poison", poison2 = "poison name", qty = 0 },
+}
+
+--------------------------------------------------------------------------------
+--  STATE
+--------------------------------------------------------------------------------
+local tPoisons     = {}
+local tIngredients = {}
+local tCoatings    = {}
+
+local function LoadState()
+  local rawP = GetVariable("tPoisons")
+  local rawI = GetVariable("tIngredients")
+  local rawC = GetVariable("tCoatings")
+
+  if rawP ~= nil then
+    local d = json.decode(rawP)
+    tPoisons = (d and next(d) ~= nil) and d or DEFAULT_POISONS
+  else
+    tPoisons = DEFAULT_POISONS
+  end
+
+  if rawI ~= nil then
+    local d = json.decode(rawI)
+    tIngredients = (d and next(d) ~= nil) and d or DEFAULT_INGREDIENTS
+  else
+    tIngredients = DEFAULT_INGREDIENTS
+  end
+
+  if rawC ~= nil then
+    local d = json.decode(rawC)
+    tCoatings = (d and next(d) ~= nil) and d or DEFAULT_COATINGS
+  else
+    tCoatings = DEFAULT_COATINGS
+  end
+end
+
+LoadState()
+
+--------------------------------------------------------------------------------
+--  HELPERS
+--------------------------------------------------------------------------------
+local function FindItem(name)
+  name = string.lower(name)
+  if tIngredients[name] then return "ingredient", name end
+  if tPoisons[name]     then return "poison",     name end
+  if tCoatings[name]    then return "coating",    name end
+  -- Partial match
+  for k, _ in pairs(tIngredients) do
+    if string.find(string.lower(k), name, 1, true) then return "ingredient", k end
+  end
+  for k, _ in pairs(tPoisons) do
+    if string.find(string.lower(k), name, 1, true) then return "poison", k end
+  end
+  for k, _ in pairs(tCoatings) do
+    if string.find(string.lower(k), name, 1, true) then return "coating", k end
+  end
+  return nil, nil
+end
+
+local function SaveState()
+  SetVariable("tPoisons",     json.encode(tPoisons))
+  SetVariable("tIngredients", json.encode(tIngredients))
+  SetVariable("tCoatings",    json.encode(tCoatings))
+end
+
+--------------------------------------------------------------------------------
+--  COMMAND FUNCTIONS
+--------------------------------------------------------------------------------
+function PoisonSet(name, qty)
+  local itype, key = FindItem(string.lower(name))
+  if itype == "ingredient" then
+    tIngredients[key].qty = qty
+    ColourNote("palegreen", "", "Set ingredient '" .. key .. "' to " .. qty .. ".")
+  elseif itype == "poison" then
+    tPoisons[key].qty = qty
+    ColourNote("palegreen", "", "Set poison '" .. key .. "' to " .. qty .. ".")
+  elseif itype == "coating" then
+    tCoatings[key].qty = qty
+    ColourNote("palegreen", "", "Set coating '" .. key .. "' to " .. qty .. ".")
+  else
+    ColourNote("tomato", "", "Unknown item '" .. name .. "'. Use 'poison additem' to add it first.")
+  end
+  SaveState()
+  update_window()
+end
+
+function PoisonAdd(name, qty)
+  local itype, key = FindItem(string.lower(name))
+  if itype == "ingredient" then
+    tIngredients[key].qty = tIngredients[key].qty + qty
+    ColourNote("palegreen", "", "Added " .. qty .. " to ingredient '" .. key .. "'. Now: " .. tIngredients[key].qty)
+  elseif itype == "poison" then
+    tPoisons[key].qty = tPoisons[key].qty + qty
+    ColourNote("palegreen", "", "Added " .. qty .. " to poison '" .. key .. "'. Now: " .. tPoisons[key].qty)
+  elseif itype == "coating" then
+    tCoatings[key].qty = tCoatings[key].qty + qty
+    ColourNote("palegreen", "", "Added " .. qty .. " to coating '" .. key .. "'. Now: " .. tCoatings[key].qty)
+  else
+    ColourNote("tomato", "", "Unknown item '" .. name .. "'. Use 'poison additem' to add it first.")
+  end
+  SaveState()
+  update_window()
+end
+
+function PoisonUse(name, qty)
+  local itype, key = FindItem(string.lower(name))
+  if itype == "ingredient" then
+    tIngredients[key].qty = math.max(0, tIngredients[key].qty - qty)
+    ColourNote("palegreen", "", "Used " .. qty .. " of ingredient '" .. key .. "'. Now: " .. tIngredients[key].qty)
+  elseif itype == "poison" then
+    tPoisons[key].qty = math.max(0, tPoisons[key].qty - qty)
+    ColourNote("palegreen", "", "Used " .. qty .. " of poison '" .. key .. "'. Now: " .. tPoisons[key].qty)
+  elseif itype == "coating" then
+    tCoatings[key].qty = math.max(0, tCoatings[key].qty - qty)
+    ColourNote("palegreen", "", "Used " .. qty .. " of coating '" .. key .. "'. Now: " .. tCoatings[key].qty)
+  else
+    ColourNote("tomato", "", "Unknown item '" .. name .. "'.")
+  end
+  SaveState()
+  update_window()
+end
+
+function PoisonReset()
+  for k, _ in pairs(tIngredients) do tIngredients[k].qty = 0 end
+  for k, _ in pairs(tPoisons)     do tPoisons[k].qty = 0     end
+  for k, _ in pairs(tCoatings)    do tCoatings[k].qty = 0    end
+  ColourNote("yellow", "", "All quantities reset to 0.")
+  SaveState()
+  update_window()
+end
+
+function PoisonAddItem(itype, name)
+  name = string.lower(name)
+  if itype == "ingredient" then
+    if tIngredients[name] then
+      ColourNote("yellow", "", "Ingredient '" .. name .. "' already exists.")
+    else
+      tIngredients[name] = { qty = 0 }
+      ColourNote("palegreen", "", "Added ingredient '" .. name .. "'.")
+      SaveState(); update_window()
+    end
+  elseif itype == "poison" then
+    if tPoisons[name] then
+      ColourNote("yellow", "", "Poison '" .. name .. "' already exists.")
+    else
+      tPoisons[name] = { appearance = "unknown", ingredients = {}, qty = 0 }
+      ColourNote("palegreen", "", "Added poison '" .. name .. "'.")
+      SaveState(); update_window()
+    end
+  elseif itype == "coating" then
+    if tCoatings[name] then
+      ColourNote("yellow", "", "Coating '" .. name .. "' already exists.")
+    else
+      tCoatings[name] = { base = "pale brown goo", poison1 = "bloat poison", poison2 = "unknown", qty = 0 }
+      ColourNote("palegreen", "", "Added coating '" .. name .. "'. Use 'coating setbase' and 'coating setpoison' to configure it.")
+      SaveState(); update_window()
+    end
+  end
+end
+
+function PoisonRemoveItem(name)
+  name = string.lower(name)
+  local itype, key = FindItem(name)
+  if itype == "ingredient" then
+    tIngredients[key] = nil
+    ColourNote("palegreen", "", "Removed ingredient '" .. key .. "'.")
+  elseif itype == "poison" then
+    tPoisons[key] = nil
+    ColourNote("palegreen", "", "Removed poison '" .. key .. "'.")
+  elseif itype == "coating" then
+    tCoatings[key] = nil
+    ColourNote("palegreen", "", "Removed coating '" .. key .. "'.")
+  else
+    ColourNote("tomato", "", "Unknown item '" .. name .. "'.")
+    return
+  end
+  SaveState(); update_window()
+end
+
+function PoisonLink(ingredient, poison)
+  ingredient = string.lower(ingredient)
+  poison     = string.lower(poison)
+  if not tPoisons[poison] then
+    ColourNote("tomato", "", "Unknown poison '" .. poison .. "'.")
+    return
+  end
+  if not tIngredients[ingredient] then
+    tIngredients[ingredient] = { qty = 0 }
+    ColourNote("yellow", "", "Ingredient '" .. ingredient .. "' auto-added to ingredient list.")
+  end
+  for _, v in ipairs(tPoisons[poison].ingredients) do
+    if v == ingredient then
+      ColourNote("yellow", "", "'" .. ingredient .. "' is already linked to '" .. poison .. "'.")
+      return
+    end
+  end
+  table.insert(tPoisons[poison].ingredients, ingredient)
+  ColourNote("palegreen", "", "Linked '" .. ingredient .. "' to '" .. poison .. "'.")
+  SaveState(); update_window()
+end
+
+function CoatingSetBase(coating, base)
+  coating = string.lower(coating)
+  base    = string.lower(base)
+  local _, key = FindItem(coating)
+  if not key or not tCoatings[key] then
+    ColourNote("tomato", "", "Unknown coating '" .. coating .. "'.")
+    return
+  end
+  tCoatings[key].base = base
+  -- Auto-add base to ingredients if not present
+  if not tIngredients[base] then
+    tIngredients[base] = { qty = 0 }
+    ColourNote("yellow", "", "Ingredient '" .. base .. "' auto-added to ingredient list.")
+  end
+  ColourNote("palegreen", "", "Set base for '" .. key .. "' to '" .. base .. "'.")
+  SaveState(); update_window()
+end
+
+function CoatingSetPoison(coating, poison)
+  coating = string.lower(coating)
+  poison  = string.lower(poison)
+  local _, key = FindItem(coating)
+  if not key or not tCoatings[key] then
+    ColourNote("tomato", "", "Unknown coating '" .. coating .. "'.")
+    return
+  end
+  tCoatings[key].poison2 = poison
+  ColourNote("palegreen", "", "Set secondary poison for '" .. key .. "' to '" .. poison .. "'.")
+  SaveState(); update_window()
+end
+
+function PoisonShow()
+  Note("")
+  ColourNote("yellow", "", "=== POISON TRACKER ===")
+
+  -- POISONS
+  Note("")
+  ColourNote("cyan", "", "-- POISONS --")
+  for pname, pdata in pairs(tPoisons) do
+    local qtyCol     = pdata.qty > 0 and "palegreen" or "tomato"
+    local appearance = pdata.appearance or "unknown appearance"
+    ColourTell("white",  "", "  " .. pname)
+    ColourTell("silver", "", " (" .. appearance .. ")  qty: ")
+    ColourNote(qtyCol,   "", tostring(pdata.qty))
+    if #pdata.ingredients > 0 then
+      for _, ing in ipairs(pdata.ingredients) do
+        local iqty   = tIngredients[ing] and tIngredients[ing].qty or 0
+        local iColor = iqty > 0 and "palegreen" or "tomato"
+        ColourTell("silver", "", "    -> " .. ing .. ": ")
+        ColourNote(iColor,   "", tostring(iqty))
+      end
+    else
+      ColourNote("silver", "", "    (no ingredients linked)")
+    end
+  end
+
+  -- COATINGS
+  Note("")
+  ColourNote("cyan", "", "-- COATINGS --")
+  for cname, cdata in pairs(tCoatings) do
+    local qtyCol = cdata.qty > 0 and "palegreen" or "tomato"
+    local base   = cdata.base    or "unknown"
+    local p1     = cdata.poison1 or "unknown"
+    local p2     = cdata.poison2 or "unknown"
+    local bqty   = tIngredients[base] and tIngredients[base].qty or 0
+    local p1qty  = tPoisons[p1]       and tPoisons[p1].qty       or 0
+    local p2qty  = tPoisons[p2]       and tPoisons[p2].qty       or 0
+    local bCol   = bqty  > 0 and "palegreen" or "tomato"
+    local p1Col  = p1qty > 0 and "palegreen" or "tomato"
+    local p2Col  = p2qty > 0 and "palegreen" or "tomato"
+    ColourTell("white",  "", "  " .. cname .. "  ")
+    ColourTell("silver", "", "qty: ")
+    ColourNote(qtyCol,   "", tostring(cdata.qty))
+    ColourTell("silver", "", "    base:    " .. base .. "  qty: ")
+    ColourNote(bCol,     "", tostring(bqty))
+    ColourTell("silver", "", "    poison1: " .. p1 .. "  qty: ")
+    ColourNote(p1Col,    "", tostring(p1qty))
+    if cdata.poison2 then
+      ColourTell("silver", "", "    poison2: " .. p2 .. "  qty: ")
+      ColourNote(p2Col,    "", tostring(p2qty))
+    end
+  end
+
+  -- ALL INGREDIENTS
+  Note("")
+  ColourNote("cyan", "", "-- ALL INGREDIENTS --")
+  for iname, idata in pairs(tIngredients) do
+    local iColor = idata.qty > 0 and "palegreen" or "tomato"
+    ColourTell("lightyellow", "", "  " .. iname .. ": ")
+    ColourNote(iColor, "", tostring(idata.qty))
+  end
+  Note("")
+end
+
+function PoisonHelp()
+  Note("")
+  ColourNote("yellow", "", "=== POISON TRACKER COMMANDS ===")
+  ColourNote("cyan",  "", "  -- Quantities --")
+  ColourNote("white", "", "  poison set <item> <qty>                 - Set quantity directly")
+  ColourNote("white", "", "  poison add <item> <qty>                 - Add to current quantity")
+  ColourNote("white", "", "  poison use <item> <qty>                 - Subtract from current quantity")
+  ColourNote("white", "", "  poison reset                            - Reset ALL quantities to 0")
+  ColourNote("cyan",  "", "  -- Display --")
+  ColourNote("white", "", "  poison show                             - Full inventory in main window")
+  ColourNote("cyan",  "", "  -- Managing items --")
+  ColourNote("white", "", "  poison additem ingredient <n>           - Add a new ingredient")
+  ColourNote("white", "", "  poison additem poison <n>               - Add a new poison")
+  ColourNote("white", "", "  poison additem coating <n>              - Add a new coating")
+  ColourNote("white", "", "  poison removeitem <n>                   - Remove any item")
+  ColourNote("white", "", "  poison link <ingredient> to <poison>    - Link ingredient to a poison")
+  ColourNote("cyan",  "", "  -- Coatings --")
+  ColourNote("white", "", "  coating setbase <coating> : <base>      - Set the base ingredient")
+  ColourNote("white", "", "  coating setpoison <coating> : <poison>  - Set the poison used")
+  ColourNote("cyan",  "", "  -- Help --")
+  ColourNote("white", "", "  poison help                             - Show this help")
+  Note("")
+end
+
+--------------------------------------------------------------------------------
+--  MINIWINDOW  (fixed height + scrollable)
+--------------------------------------------------------------------------------
+win = "PoisonTracker" .. GetPluginID()
+
+local font_size        = 9
+local window_width     = 300
+local window_height    = 300   -- fixed visible height (change this to taste)
+local line_spacing     = 2
+local window_inner_pad = 5
+local scroll_bar_width = 12
+local font_height      = 0
+local scroll_offset    = 0     -- current scroll position in lines
+local thumb_dragging   = false -- true while dragging the scroll thumb
+local thumb_drag_start_y   = 0 -- mouse y when thumb drag began
+local thumb_drag_start_off = 0 -- scroll_offset when thumb drag began
+
+local COL_BG         = ColourNameToRGB("black")
+local COL_BORDER     = ColourNameToRGB("silver")
+local COL_TITLE      = ColourNameToRGB("white")
+local COL_HEADER     = ColourNameToRGB("cyan")
+local COL_LABEL      = ColourNameToRGB("silver")
+local COL_APPEARANCE = ColourNameToRGB("darkgray")
+local COL_GOOD       = ColourNameToRGB("palegreen")
+local COL_BAD        = ColourNameToRGB("tomato")
+local COL_INGREDIENT = ColourNameToRGB("lightyellow")
+local COL_COATING    = ColourNameToRGB("wheat")
+local COL_SUBTEXT    = ColourNameToRGB("darkgray")
+local COL_SCROLLBG   = ColourNameToRGB("dimgray")
+local COL_SCROLLTHUMB= ColourNameToRGB("silver")
+local COL_SCROLLBTN  = ColourNameToRGB("gray")
+local COL_SCROLLARROW= ColourNameToRGB("white")
+local COL_TAB_ACTIVE = ColourNameToRGB("darkslategray")
+local COL_TAB_INACTIVE = ColourNameToRGB("black")
+local COL_TAB_TEXT_ACTIVE = ColourNameToRGB("white")
+local COL_TAB_TEXT_INACTIVE = ColourNameToRGB("silver")
+local COL_TAB_BORDER = ColourNameToRGB("silver")
+
+local active_tab       = "poisons"  -- "poisons", "coatings", "ingredients"
+local startx, starty   = 0, 0
+local resize_start_x   = 0   -- mouse x when resize began
+local resize_start_y   = 0   -- mouse y when resize began
+local resize_start_w   = 0   -- window width when resize began
+local resize_start_h   = 0   -- window height when resize began
+local MIN_WIDTH        = 180  -- minimum window width
+local MIN_HEIGHT       = 120  -- minimum window height
+local EDGE_THICKNESS   = 6    -- pixels of edge/corner hotspot
+
+-- Build rows for the active tab only
+local function BuildRows()
+  local rows = {}
+
+  local function row(text, col, indent)
+    indent = indent or 0
+    table.insert(rows, { text = text, col = col, indent = indent })
+  end
+
+  if active_tab == "poisons" then
+    for pname, pdata in pairs(tPoisons) do
+      local appearance = pdata.appearance or "unknown appearance"
+      local qtyCol = pdata.qty > 0 and COL_GOOD or COL_BAD
+      row(pname .. "  [" .. tostring(pdata.qty) .. "]", qtyCol, 0)
+      row(appearance, COL_APPEARANCE, 2)
+      if #pdata.ingredients == 0 then
+        row("(no ingredients linked)", COL_LABEL, 4)
+      else
+        for _, ing in ipairs(pdata.ingredients) do
+          local iqty = tIngredients[ing] and tIngredients[ing].qty or 0
+          local iCol = iqty > 0 and COL_GOOD or COL_BAD
+          row("+ " .. ing .. "  [" .. tostring(iqty) .. "]", iCol, 4)
+        end
+      end
+      row("", COL_BG, 0)  -- spacer between poisons
+    end
+
+  elseif active_tab == "coatings" then
+    for cname, cdata in pairs(tCoatings) do
+      local qtyCol = cdata.qty > 0 and COL_GOOD or COL_BAD
+      local base   = cdata.base    or "unknown"
+      local p1     = cdata.poison1 or "unknown"
+      local bqty   = tIngredients[base] and tIngredients[base].qty or 0
+      local p1qty  = tPoisons[p1]       and tPoisons[p1].qty       or 0
+      local bCol   = bqty  > 0 and COL_GOOD or COL_BAD
+      local p1Col  = p1qty > 0 and COL_GOOD or COL_BAD
+      row(cname .. "  [" .. tostring(cdata.qty) .. "]", COL_COATING, 0)
+      row("base:    " .. base .. "  [" .. tostring(bqty) .. "]", bCol, 4)
+      row("poison1: " .. p1  .. "  [" .. tostring(p1qty) .. "]", p1Col, 4)
+      if cdata.poison2 then
+        local p2    = cdata.poison2
+        local p2qty = tPoisons[p2] and tPoisons[p2].qty or 0
+        local p2Col = p2qty > 0 and COL_GOOD or COL_BAD
+        row("poison2: " .. p2 .. "  [" .. tostring(p2qty) .. "]", p2Col, 4)
+      end
+      row("", COL_BG, 0)  -- spacer between coatings
+    end
+
+  elseif active_tab == "ingredients" then
+    for iname, idata in pairs(tIngredients) do
+      local iCol = idata.qty > 0 and COL_GOOD or COL_BAD
+      row(iname .. "  [" .. tostring(idata.qty) .. "]", iCol, 0)
+    end
+  end
+
+  return rows
+end
+
+function update_window()
+  WindowCreate(win, 0, 0, window_width, window_height, miniwin.pos_center_all, 0, COL_BG)
+  WindowFont(win, "f", "Consolas", font_size, false, false, false, false)
+  font_height = WindowFontInfo(win, "f", 1)
+
+  local lh          = font_height + line_spacing
+  local btn_height  = lh + 2
+  local title_height= lh + 2
+  -- Scrollable viewport: between title bar and bottom, minus two scroll buttons
+  local tab_height_val  = lh + 4
+  local viewport_top    = window_inner_pad + title_height + tab_height_val
+  local viewport_bottom = window_height - window_inner_pad
+  local viewport_height = viewport_bottom - viewport_top
+  local visible_lines   = math.floor(viewport_height / lh)
+
+  local rows      = BuildRows()
+  local total_lines = #rows
+
+  -- Clamp scroll offset
+  local max_scroll = math.max(0, total_lines - visible_lines)
+  if scroll_offset > max_scroll then scroll_offset = max_scroll end
+  if scroll_offset < 0          then scroll_offset = 0          end
+
+  -- Background & border
+  WindowRectOp(win, miniwin.rect_fill,  0, 0, window_width, window_height, COL_BG)
+  WindowRectOp(win, miniwin.rect_frame, 0, 0, window_width, window_height, COL_BORDER)
+
+  -- Title bar
+  local ty = window_inner_pad
+  WindowRectOp(win, miniwin.rect_fill, 0, ty, window_width, ty + title_height, ColourNameToRGB("darkslategray"))
+  local title = "Poison Tracker"
+  WindowText(win, "f", title, (window_width - WindowTextWidth(win, "f", title)) / 2, ty, 0, 0, COL_TITLE, false)
+  WindowAddHotspot(win, "header", 0, ty, window_width - scroll_bar_width, ty + title_height,
+    "", "", "mousedown", "cancelmousedown", "mouseup", "Drag to move", miniwin.cursor_hand, 0)
+  WindowDragHandler(win, "header", "dragmove", "dragrelease", 0)
+
+  -- ?? Tabs ?????????????????????????????????????????????????
+  local tab_y      = ty + title_height
+  local tab_height = lh + 4
+  local tabs       = { {"Poisons", "poisons"}, {"Coatings", "coatings"}, {"Ingredients", "ingredients"} }
+  local tab_w      = math.floor((window_width - scroll_bar_width) / #tabs)
+  for i, tab in ipairs(tabs) do
+    local label   = tab[1]
+    local key     = tab[2]
+    local tx      = (i - 1) * tab_w
+    local is_active = (active_tab == key)
+    local bg      = is_active and COL_TAB_ACTIVE or COL_TAB_INACTIVE
+    local fg      = is_active and COL_TAB_TEXT_ACTIVE or COL_TAB_TEXT_INACTIVE
+    WindowRectOp(win, miniwin.rect_fill, tx, tab_y, tx + tab_w, tab_y + tab_height, bg)
+    WindowRectOp(win, miniwin.rect_frame, tx, tab_y, tx + tab_w, tab_y + tab_height, COL_TAB_BORDER)
+    local tw = WindowTextWidth(win, "f", label)
+    WindowText(win, "f", label, tx + (tab_w - tw) / 2, tab_y + 2, 0, 0, fg, false)
+    WindowAddHotspot(win, "tab_" .. key, tx, tab_y, tx + tab_w, tab_y + tab_height,
+      "", "", "mousedown", "cancelmousedown", "tab_click", "Switch to " .. label, miniwin.cursor_hand, 0)
+  end
+
+  -- ?? Scroll bar ????????????????????????????????????????????
+  local sb_x     = window_width - scroll_bar_width
+  local sb_top   = ty + title_height + (lh + 4)  -- below title and tabs
+  local sb_bot   = window_height - window_inner_pad
+  local sb_height= sb_bot - sb_top
+
+  -- Scroll bar track
+  WindowRectOp(win, miniwin.rect_fill, sb_x, sb_top, window_width, sb_bot, COL_SCROLLBG)
+
+  -- Up button (?)
+  WindowRectOp(win, miniwin.rect_fill, sb_x, sb_top, window_width, sb_top + btn_height, COL_SCROLLBTN)
+  WindowText(win, "f", "^", sb_x + 2, sb_top + 1, 0, 0, COL_SCROLLARROW, false)
+  WindowAddHotspot(win, "scroll_up", sb_x, sb_top, window_width, sb_top + btn_height,
+    "", "", "mousedown", "cancelmousedown", "scroll_click", "Scroll up (3 lines)", miniwin.cursor_arrow, 0)
+
+  -- Down button (?)
+  WindowRectOp(win, miniwin.rect_fill, sb_x, sb_bot - btn_height, window_width, sb_bot, COL_SCROLLBTN)
+  WindowText(win, "f", "v", sb_x + 2, sb_bot - btn_height + 1, 0, 0, COL_SCROLLARROW, false)
+  WindowAddHotspot(win, "scroll_down", sb_x, sb_bot - btn_height, window_width, sb_bot,
+    "", "", "mousedown", "cancelmousedown", "scroll_click", "Scroll down (3 lines)", miniwin.cursor_arrow, 0)
+
+  -- Scroll thumb
+  if total_lines > visible_lines then
+    local track_top    = sb_top + btn_height
+    local track_height = sb_height - btn_height * 2
+    local thumb_height = math.max(8, math.floor(track_height * visible_lines / total_lines))
+    local thumb_top    = track_top + math.floor((track_height - thumb_height) * scroll_offset / max_scroll)
+    WindowRectOp(win, miniwin.rect_fill, sb_x + 1, thumb_top, window_width - 1, thumb_top + thumb_height, COL_SCROLLTHUMB)
+    -- Thumb drag hotspot
+    WindowAddHotspot(win, "scroll_thumb", sb_x + 1, thumb_top, window_width - 1, thumb_top + thumb_height,
+      "", "", "thumb_mousedown", "cancelmousedown", "mouseup", "Drag to scroll", miniwin.cursor_hand, 0)
+    WindowDragHandler(win, "scroll_thumb", "thumb_dragmove", "dragrelease", 0)
+  end
+
+  -- ?? Clip and draw rows ????????????????????????????????????
+  local content_width = sb_x - window_inner_pad
+  WindowRectOp(win, miniwin.rect_fill, 0, viewport_top, sb_x, viewport_bottom, COL_BG)
+
+  for i = 1, visible_lines do
+    local row_index = i + scroll_offset
+    if row_index > total_lines then break end
+    local r   = rows[row_index]
+    local ry  = viewport_top + (i - 1) * lh
+    local rx  = window_inner_pad + r.indent * (font_height / 2)
+    WindowText(win, "f", r.text, rx, ry, sb_x, ry + lh, r.col, false)
+  end
+
+  -- ?? Resize hotspots ?????????????????????????????????????
+  -- Right edge
+  WindowAddHotspot(win, "resize_right",
+    window_width - EDGE_THICKNESS, 0,
+    window_width, window_height - EDGE_THICKNESS,
+    "", "", "mousedown", "cancelmousedown", "mouseup",
+    "Drag to resize width", miniwin.cursor_we, 0)
+  WindowDragHandler(win, "resize_right", "dragmove", "dragrelease", 0)
+
+  -- Bottom edge
+  WindowAddHotspot(win, "resize_bottom",
+    0, window_height - EDGE_THICKNESS,
+    window_width - EDGE_THICKNESS, window_height,
+    "", "", "mousedown", "cancelmousedown", "mouseup",
+    "Drag to resize height", miniwin.cursor_ns, 0)
+  WindowDragHandler(win, "resize_bottom", "dragmove", "dragrelease", 0)
+
+  -- Bottom-right corner (takes priority, drawn last)
+  WindowAddHotspot(win, "resize_corner",
+    window_width - EDGE_THICKNESS, window_height - EDGE_THICKNESS,
+    window_width, window_height,
+    "", "", "mousedown", "cancelmousedown", "mouseup",
+    "Drag to resize", miniwin.cursor_nwse, 0)
+  WindowDragHandler(win, "resize_corner", "dragmove", "dragrelease", 0)
+
+  -- Draw a small corner grip indicator
+  WindowLine(win, window_width - EDGE_THICKNESS, window_height - 2,
+    window_width - 2, window_height - 2, COL_SCROLLBTN,
+    miniwin.pen_solid + miniwin.pen_endcap_flat, 1)
+  WindowLine(win, window_width - 2, window_height - EDGE_THICKNESS,
+    window_width - 2, window_height - 2, COL_SCROLLBTN,
+    miniwin.pen_solid + miniwin.pen_endcap_flat, 1)
+
+  WindowShow(win, true)
+  Repaint()
+end
+
+-- Helper: compute max scroll given current window state
+local function GetMaxScroll()
+  local rows = BuildRows()
+  local lh          = font_height + line_spacing
+  local title_height = lh + 2
+  local tab_height  = lh + 4
+  local viewport_height = window_height - window_inner_pad - (window_inner_pad + title_height + tab_height)
+  local visible_lines   = math.floor(viewport_height / lh)
+  return math.max(0, #rows - visible_lines), visible_lines
+end
+
+-- Single click scrolls 3 lines at a time
+function scroll_click(flags, hotspot_id)
+  local max_scroll, _ = GetMaxScroll()
+  if hotspot_id == "scroll_up" then
+    scroll_offset = math.max(0, scroll_offset - 3)
+  elseif hotspot_id == "scroll_down" then
+    scroll_offset = math.min(max_scroll, scroll_offset + 3)
+  end
+  update_window()
+end
+
+function tab_click(flags, hotspot_id)
+  local key = string.match(hotspot_id, "^tab_(.+)$")
+  if key and key ~= active_tab then
+    active_tab    = key
+    scroll_offset = 0  -- reset scroll when switching tabs
+    update_window()
+  end
+end
+
+function thumb_mousedown(flags, hotspot_id)
+  thumb_dragging       = true
+  thumb_drag_start_y   = WindowInfo(win, 18)
+  thumb_drag_start_off = scroll_offset
+end
+
+-- Thumb drag: translate pixel movement to scroll offset
+function thumb_dragmove(flags, hotspot_id)
+  if not thumb_dragging then return end
+  local max_scroll, visible_lines = GetMaxScroll()
+  if max_scroll == 0 then return end
+  local rows         = BuildRows()
+  local total_lines  = #rows
+  local lh           = font_height + line_spacing
+  local title_height = lh + 2
+  local sb_top       = window_inner_pad + title_height + 2
+  local sb_bot       = window_height - window_inner_pad
+  local btn_height   = lh + 2
+  local track_height = (sb_bot - sb_top) - btn_height * 2
+  local thumb_height = math.max(8, math.floor(track_height * visible_lines / total_lines))
+  local travel       = track_height - thumb_height
+  if travel <= 0 then return end
+  local dy           = WindowInfo(win, 18) - thumb_drag_start_y
+  local new_offset   = thumb_drag_start_off + math.floor(dy * max_scroll / travel)
+  scroll_offset      = math.max(0, math.min(max_scroll, new_offset))
+  update_window()
+end
+
+--------------------------------------------------------------------------------
+--  DRAG HANDLERS
+--------------------------------------------------------------------------------
+function mousedown(flags, hotspot_id)
+  if hotspot_id == "header" then
+    startx = WindowInfo(win, 14)
+    starty = WindowInfo(win, 15)
+  elseif hotspot_id == "resize_right" or hotspot_id == "resize_bottom" or hotspot_id == "resize_corner" then
+    resize_start_x = WindowInfo(win, 17)
+    resize_start_y = WindowInfo(win, 18)
+    resize_start_w = window_width
+    resize_start_h = window_height
+  end
+end
+
+function cancelmousedown(flags, hotspot_id) end
+
+function mouseup(flags, hotspot_id) end
+
+function dragmove(flags, hotspot_id)
+  if hotspot_id == "header" then
+    WindowPosition(win, WindowInfo(win, 17) - startx, WindowInfo(win, 18) - starty, 0, 2)
+
+  elseif hotspot_id == "resize_right" then
+    local dx = WindowInfo(win, 17) - resize_start_x
+    window_width = math.max(MIN_WIDTH, resize_start_w + dx)
+    update_window()
+
+  elseif hotspot_id == "resize_bottom" then
+    local dy = WindowInfo(win, 18) - resize_start_y
+    window_height = math.max(MIN_HEIGHT, resize_start_h + dy)
+    update_window()
+
+  elseif hotspot_id == "resize_corner" then
+    local dx = WindowInfo(win, 17) - resize_start_x
+    local dy = WindowInfo(win, 18) - resize_start_y
+    window_width  = math.max(MIN_WIDTH,  resize_start_w + dx)
+    window_height = math.max(MIN_HEIGHT, resize_start_h + dy)
+    update_window()
+  end
+end
+
+function dragrelease(flags, hotspot_id)
+  thumb_dragging = false
+  -- Save size on release
+  SetVariable("window_width",  tostring(window_width))
+  SetVariable("window_height", tostring(window_height))
+end
+
+--------------------------------------------------------------------------------
+--  PLUGIN LIFECYCLE
+--------------------------------------------------------------------------------
+function OnPluginInstall()  update_window() end
+function OnPluginEnable()   WindowShow(win, true)  end
+function OnPluginDisable()  WindowShow(win, false) end
+function OnPluginClose()    WindowShow(win, false) end
+
+function OnPluginSaveState()
+  SaveState()
+  SetVariable("window_pos_x",  tostring(WindowInfo(win, 10)))
+  SetVariable("window_pos_y",  tostring(WindowInfo(win, 11)))
+  SetVariable("window_width",  tostring(window_width))
+  SetVariable("window_height", tostring(window_height))
+  SetVariable("active_tab",    active_tab)
+end
+
+--------------------------------------------------------------------------------
+--  STARTUP
+--------------------------------------------------------------------------------
+WindowCreate(win, 0, 0, window_width, 200, miniwin.pos_center_all, 0, COL_BG)
+WindowFont(win, "f", "Consolas", font_size, false, false, false, false)
+font_height = WindowFontInfo(win, "f", 1)
+
+local saved_x = tonumber(GetVariable("window_pos_x"))
+local saved_y = tonumber(GetVariable("window_pos_y"))
+local saved_w = tonumber(GetVariable("window_width"))
+local saved_h = tonumber(GetVariable("window_height"))
+
+if type(saved_w) == "number" and saved_w >= MIN_WIDTH  then window_width  = saved_w end
+if type(saved_h) == "number" and saved_h >= MIN_HEIGHT then window_height = saved_h end
+local saved_tab = GetVariable("active_tab")
+if saved_tab == "poisons" or saved_tab == "coatings" or saved_tab == "ingredients" then
+  active_tab = saved_tab
+end
+
+update_window()
+
+if type(saved_x) == "number" and type(saved_y) == "number" then
+  WindowPosition(win, saved_x, saved_y, 0, 2)
+end
+
+ColourNote("palegreen", "", "Poison Tracker loaded. Type 'poison help' for commands.")
+
+]]>
+</script>
+
+<triggers>
+</triggers>
+
+</muclient>
